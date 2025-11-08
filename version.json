@@ -1,1 +1,8 @@
-
+{
+  "version": "0.9.0",
+  "win": {
+    "exe_url": "https://github.com/itay10001/meadow.lite/releases/download/v0.9.0/MeadowLite.exe",
+    "sha256": ""
+  },
+  "notes": "Initial release."
+}
