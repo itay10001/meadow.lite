@@ -1,10 +1,16 @@
 name: Build & Release MeadowLite
 
 on:
-  workflow_dispatch:         # <— manual “Run workflow” button
+  # Manual button in Actions, with a tag input (e.g., v0.9.2)
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.9.2)'
+        required: true
+        default: 'v0.0.0'
+  # Auto when you push a tag like v0.9.3
   push:
-    tags:
-      - 'v*'                 # runs when you push a tag like v0.9.3
+    tags: ['v*']
 
 permissions:
   contents: write
@@ -37,25 +43,23 @@ jobs:
           $h = Get-FileHash dist\MeadowLite.exe -Algorithm SHA256
           echo "sha256=$($h.Hash.ToLower())" >> $env:GITHUB_OUTPUT
 
-      - name: Create Release (for tag builds)
-        if: startsWith(github.ref, 'refs/tags/')
+      # Upload to the tag's release. If it already exists, this attaches the EXE.
+      - name: Create/Update Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           files: dist/MeadowLite.exe
           generate_release_notes: true
 
-      - name: Update version.json (for tag builds)
-        if: startsWith(github.ref, 'refs/tags/')
+      # Update version.json in main to point to the new EXE
+      - name: Update version.json
         run: |
-          $tag = "${{ github.ref_name }}"           # e.g. v0.9.3
+          $tag = "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
           $ver = $tag.TrimStart("v")
           $exe = "https://github.com/${{ github.repository }}/releases/download/$tag/MeadowLite.exe"
           $obj = @{
             version = $ver
-            win = @{
-              exe_url = $exe
-              sha256  = "${{ steps.hash.outputs.sha256 }}"
-            }
+            win = @{ exe_url = $exe; sha256 = "${{ steps.hash.outputs.sha256 }}" }
             notes = "Auto: $tag released"
           }
           $json = ($obj | ConvertTo-Json -Depth 5)
