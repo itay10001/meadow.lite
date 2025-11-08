@@ -1,14 +1,16 @@
 name: Build & Release MeadowLite
 
 on:
-  # Manual button in Actions, with a tag input (e.g., v0.9.2)
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v0.9.2)'
-        required: true
-        default: 'v0.0.0'
-  # Auto when you push a tag like v0.9.3
+        description: 'Tag to attach the EXE to (e.g. v0.9.2). If blank, a draft release will be created with a temporary tag.'
+        required: false
+        default: ''
+      game_file:
+        description: 'Entry .py file in repo root (leave blank to auto-detect the largest .py)'
+        required: false
+        default: ''
   push:
     tags: ['v*']
 
@@ -22,6 +24,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Show repo tree (root)
+        run: |
+          echo "=== REPO ROOT ==="
+          ls -la
+          echo "=== PY FILES ==="
+          ls -la *.py || true
+        shell: bash
+
+      - name: Resolve inputs (tag & game_file)
+        id: vars
+        shell: pwsh
+        run: |
+          $manual = "${{ github.event_name }}" -eq "workflow_dispatch"
+
+          # Tag
+          $tag = if ($manual -and "${{ inputs.tag }}") { "${{ inputs.tag }}" } else { "${{ github.ref_name }}" }
+          if (-not $tag) { $tag = "v0.0.0-temp" }     # fallback for manual runs with no tag
+          echo "tag=$tag" >> $env:GITHUB_OUTPUT
+
+          # Game file
+          $game = "${{ inputs.game_file }}"
+          if (-not $game) {
+            $cands = Get-ChildItem -Path . -Filter *.py | Sort-Object Length -Descending
+            if ($cands.Count -eq 0) { Write-Error "No .py files found in repo root. Upload your game script (e.g., meadowlite_plus.py) to the repo root." }
+            $game = $cands[0].Name
+            Write-Host "Auto-detected game file: $game"
+          }
+          if (-not (Test-Path $game)) { Write-Error "Entry file not found: $game (put it in repo root or set the 'game_file' input)" }
+          echo "game=$game" >> $env:GITHUB_OUTPUT
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -31,36 +63,42 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller pygame
+        shell: pwsh
 
       - name: Build EXE
+        shell: pwsh
         run: |
-          pyinstaller -y --onefile --windowed --name MeadowLite meadowlite_selfupdating.py
-        shell: powershell
+          $GAME = "${{ steps.vars.outputs.game }}"
+          Write-Host "Building $GAME..."
+          pyinstaller -y --onefile --windowed --name MeadowLite $GAME
+          if (-not (Test-Path "dist/MeadowLite.exe")) { Write-Error "Build did not produce dist/MeadowLite.exe" }
 
       - name: Compute SHA256
         id: hash
+        shell: pwsh
         run: |
           $h = Get-FileHash dist\MeadowLite.exe -Algorithm SHA256
           echo "sha256=$($h.Hash.ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "SHA256: $($h.Hash.ToLower())"
 
-      # Upload to the tag's release. If it already exists, this attaches the EXE.
-      - name: Create/Update Release
+      - name: Create/Update Release and upload EXE
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          tag_name: ${{ steps.vars.outputs.tag }}
           files: dist/MeadowLite.exe
           generate_release_notes: true
 
-      # Update version.json in main to point to the new EXE
-      - name: Update version.json
+      - name: Update version.json (only if pushing to a real tag or you provided one)
+        if: ${{ steps.vars.outputs.tag != 'v0.0.0-temp' }}
+        shell: pwsh
         run: |
-          $tag = "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          $tag = "${{ steps.vars.outputs.tag }}"
           $ver = $tag.TrimStart("v")
           $exe = "https://github.com/${{ github.repository }}/releases/download/$tag/MeadowLite.exe"
           $obj = @{
             version = $ver
-            win = @{ exe_url = $exe; sha256 = "${{ steps.hash.outputs.sha256 }}" }
-            notes = "Auto: $tag released"
+            win     = @{ exe_url = $exe; sha256 = "${{ steps.hash.outputs.sha256 }}" }
+            notes   = "Auto: $tag released"
           }
           $json = ($obj | ConvertTo-Json -Depth 5)
           Set-Content -Path version.json -Value $json -Encoding UTF8
@@ -69,4 +107,3 @@ jobs:
           git add version.json
           git commit -m "chore: update version.json for $tag"
           git push
-        shell: powershell
