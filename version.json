@@ -1,8 +1,8 @@
 {
+  "notes": "Auto: v0.9.4.1 released",
+  "version": "0.9.4.1",
   "win": {
-    "sha256": "7af797764a6794c56f0f444b00e12d3e75fa4c8a183417b45bd4611b4909ace4",
-    "exe_url": "https://github.com/itay10001/meadow.lite/releases/download/v0.9.4/MeadowLite.exe"
-  },
-  "notes": "Auto: v0.9.4 released",
-  "version": "0.9.4"
+    "sha256": "859253eed3c1911990fccb42d52385f8ef4026465845671d446ed33a4b777d25",
+    "exe_url": "https://github.com/itay10001/meadow.lite/releases/download/v0.9.4.1/MeadowLite.exe"
+  }
 }
