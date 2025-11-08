@@ -1,9 +1,10 @@
 name: Build & Release MeadowLite
 
 on:
+  workflow_dispatch:         # <— manual “Run workflow” button
   push:
     tags:
-      - 'v*'   # runs when you push a tag like v0.9.3
+      - 'v*'                 # runs when you push a tag like v0.9.3
 
 permissions:
   contents: write
@@ -36,13 +37,15 @@ jobs:
           $h = Get-FileHash dist\MeadowLite.exe -Algorithm SHA256
           echo "sha256=$($h.Hash.ToLower())" >> $env:GITHUB_OUTPUT
 
-      - name: Create Release
+      - name: Create Release (for tag builds)
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/MeadowLite.exe
           generate_release_notes: true
 
-      - name: Update version.json
+      - name: Update version.json (for tag builds)
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           $tag = "${{ github.ref_name }}"           # e.g. v0.9.3
           $ver = $tag.TrimStart("v")
